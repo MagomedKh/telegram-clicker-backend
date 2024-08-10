@@ -1,14 +1,10 @@
 from typing import Dict
 from fastapi import APIRouter, WebSocket
 import asyncio
-
 from starlette.websockets import WebSocketDisconnect
-
 from src.settings import redis_instance
 
-
 ws_router = APIRouter()
-
 
 class ConnectionManager:
     def __init__(self):
@@ -38,14 +34,11 @@ class ConnectionManager:
             for connection in user_conns.values():
                 await connection.send_text(message)
 
-
 manager = ConnectionManager()
-
 
 @ws_router.websocket("/ws/coins_gain/{user_id}/")
 async def websocket_count_gain(websocket: WebSocket, user_id: str):
     if not await manager.connect(websocket, f"test_{user_id}", "coins_gain"):
-        await websocket.accept()
         await manager.send_message("WebSocket already open", websocket)
         await websocket.close()
         return
@@ -53,8 +46,9 @@ async def websocket_count_gain(websocket: WebSocket, user_id: str):
         while True:
             try:
                 data = await websocket.receive_json()
-                counter = float(data.get('coins'))
+                counter = data.get('coins', 0)
                 if counter is not None:
+                    counter = float(counter)
                     redis_instance.set(f"test_counter_{user_id}", str(counter))
                     await manager.send_message(f"Counter updated: {counter}", websocket)
                 else:
@@ -62,16 +56,15 @@ async def websocket_count_gain(websocket: WebSocket, user_id: str):
                 await asyncio.sleep(1)
             except WebSocketDisconnect:
                 break
-    except Exception as e:
-        print(f"Error: {e}")
+            except Exception as e:
+                await manager.send_message(f"Error: {e}", websocket)
+                break
     finally:
         manager.disconnect(f"test_{user_id}", "coins_gain")
-
 
 @ws_router.websocket("/ws/energy_gain/{user_id}/")
 async def websocket_energy_gain(websocket: WebSocket, user_id: str):
     if not await manager.connect(websocket, f"test_{user_id}", "energy_gain"):
-        await websocket.accept()
         await manager.send_message("WebSocket already open", websocket)
         await websocket.close()
         return
@@ -79,8 +72,9 @@ async def websocket_energy_gain(websocket: WebSocket, user_id: str):
         while True:
             try:
                 data = await websocket.receive_json()
-                energy = float(data.get('energy'))
+                energy = data.get('energy', 0)
                 if energy is not None:
+                    energy = float(energy)
                     redis_instance.set(f"test_energy_{user_id}", str(energy))
                     await manager.send_message(f"Energy updated: {energy}", websocket)
                 else:
@@ -88,7 +82,8 @@ async def websocket_energy_gain(websocket: WebSocket, user_id: str):
                 await asyncio.sleep(1)
             except WebSocketDisconnect:
                 break
-    except Exception as e:
-        print(f"Error: {e}")
+            except Exception as e:
+                await manager.send_message(f"Error: {e}", websocket)
+                break
     finally:
         manager.disconnect(f"test_{user_id}", "energy_gain")
